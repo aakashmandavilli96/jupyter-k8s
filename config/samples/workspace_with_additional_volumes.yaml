@@ -13,8 +13,10 @@ spec:
     size: "5Gi"
   volumes:
     - name: "data-volume"
-      persistentVolumeClaimName: "shared-data-pvc"
       mountPath: "/data"
-    - name: "models-volume"
-      persistentVolumeClaimName: "ml-models-pvc"
-      mountPath: "/models"
+      persistentVolumeClaimName: "shared-data-pvc"
+    - name: "shm"
+      mountPath: "/dev/shm"
+      emptyDir:
+        medium: "Memory"
+        sizeLimit: "1Gi"

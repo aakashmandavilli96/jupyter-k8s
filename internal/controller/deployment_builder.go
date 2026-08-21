@@ -157,13 +157,18 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 			// Skip if name conflicts with primary storage
 			continue
 		}
+		volumeSource := corev1.VolumeSource{}
+		if vol.EmptyDir != nil {
+			volumeSource.EmptyDir = vol.EmptyDir.DeepCopy()
+		}
+		if vol.PersistentVolumeClaimName != nil && *vol.PersistentVolumeClaimName != "" {
+			volumeSource.PersistentVolumeClaim = &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: *vol.PersistentVolumeClaimName,
+			}
+		}
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: vol.Name,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: vol.PersistentVolumeClaimName,
-				},
-			},
+			Name:         vol.Name,
+			VolumeSource: volumeSource,
 		})
 	}
 

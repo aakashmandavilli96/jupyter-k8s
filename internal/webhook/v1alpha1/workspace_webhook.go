@@ -349,6 +349,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 	}
 	workspacelog.Info("Validation for Workspace upon creation", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
+	// Validate volume structure before any template or permission checks
+	if err := v.volumeValidator.ValidateWorkspaceVolumes(workspace); err != nil {
+		return nil, err
+	}
+
 	// Validate template constraints
 	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
 		return nil, err
@@ -388,6 +393,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	// This allows finalizer removal even if template is already deleted
 	if !newWorkspace.DeletionTimestamp.IsZero() {
 		return nil, nil
+	}
+
+	// Validate volume structure before any template or permission checks
+	if err := v.volumeValidator.ValidateWorkspaceVolumes(newWorkspace); err != nil {
+		return nil, err
 	}
 
 	// Controller or admin users bypass validation

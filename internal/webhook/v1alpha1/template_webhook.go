@@ -29,7 +29,7 @@ func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=false,failurePolicy=ignore,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=update,versions=v1alpha1,name=vworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+// +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=false,failurePolicy=ignore,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=create;update,versions=v1alpha1,name=vworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
 // WorkspaceTemplateCustomValidator struct is responsible for validating the WorkspaceTemplate resource
 // when it is updated. It checks if constraint fields changed and returns warnings.
@@ -50,7 +50,10 @@ func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, o
 	}
 	templatelog.Info("Validation for WorkspaceTemplate upon creation", "name", template.GetName())
 
-	// No special validation needed on create
+	if violation := validateTemplateDefaultVolumes(template); violation != nil {
+		return nil, fmt.Errorf("workspace template has invalid default volume configuration: %s", violation.Message)
+	}
+
 	return nil, nil
 }
 
@@ -65,6 +68,10 @@ func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, o
 		return nil, fmt.Errorf("expected a WorkspaceTemplate object for the newObj but got %T", newObj)
 	}
 	templatelog.Info("Validation for WorkspaceTemplate upon update", "name", newTemplate.GetName())
+
+	if violation := validateTemplateDefaultVolumes(newTemplate); violation != nil {
+		return nil, fmt.Errorf("workspace template has invalid default volume configuration: %s", violation.Message)
+	}
 
 	// Check if constraint fields changed
 	if constraintsChanged(oldTemplate, newTemplate) {
@@ -109,6 +116,11 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check secondary volume policy changes
+	if secondaryStorageConstraintsChanged(oldSpec, newSpec) {
+		return true
+	}
+
 	// Check IdleShutdownOverrides.Allow changes
 	if idleShutdownAllowOverrideChanged(oldSpec.IdleShutdownOverrides, newSpec.IdleShutdownOverrides) {
 		return true
@@ -116,6 +128,24 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 
 	// Check IdleShutdownOverrides timeout bounds changes
 	if idleShutdownTimeoutBoundsChanged(oldSpec.IdleShutdownOverrides, newSpec.IdleShutdownOverrides) {
+		return true
+	}
+
+	return false
+}
+
+// secondaryStorageConstraintsChanged checks if template-defined volume defaults
+// or the policy for extra volumes changed.
+func secondaryStorageConstraintsChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceTemplateSpec) bool {
+	if !equality.Semantic.DeepEqual(oldSpec.DefaultVolumes, newSpec.DefaultVolumes) {
+		return true
+	}
+
+	if (oldSpec.AllowSecondaryStorages == nil) != (newSpec.AllowSecondaryStorages == nil) {
+		return true
+	}
+
+	if oldSpec.AllowSecondaryStorages != nil && *oldSpec.AllowSecondaryStorages != *newSpec.AllowSecondaryStorages {
 		return true
 	}
 

@@ -59,8 +59,15 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`
 
+	// DefaultVolumes specifies additional volumes that should be mounted on
+	// workspaces created from this template.
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
+	// +optional
+	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
+
 	// AllowSecondaryStorages controls whether workspaces using this template
-	// can mount additional storage volumes beyond the primary storage
+	// can mount additional storage volumes beyond the primary storage and
+	// any template-defined default volumes.
 	// +kubebuilder:default=true
 	// +optional
 	AllowSecondaryStorages *bool `json:"allowSecondaryStorages,omitempty"`

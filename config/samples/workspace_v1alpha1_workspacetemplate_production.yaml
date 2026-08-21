@@ -32,4 +32,10 @@ spec:
     defaultSize: "1Gi"
     minSize: "100Mi"
     maxSize: "20Gi"
+  defaultVolumes:
+    - name: "shm"
+      mountPath: "/dev/shm"
+      emptyDir:
+        medium: "Memory"
+        sizeLimit: "1Gi"
   appType: "jupyter"

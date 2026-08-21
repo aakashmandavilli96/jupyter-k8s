@@ -268,6 +268,43 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			VerifyPodCanAccessExternalVolumes(workspaceName, workspaceNamespace, externalPvc2Name, "/home/jovyan/shared")
 		})
 
+		It("should mount memory-backed emptyDir volumes specified in volumes field", func() {
+			workspaceFilename := "workspace-with-emptydir"
+			workspaceName := "workspace-with-emptydir"
+
+			By("creating a workspace with a memory-backed emptyDir volume")
+			createWorkspaceForTest(workspaceFilename, group, externalSubgroup)
+
+			By("waiting for the workspace to become available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying emptyDir volume mount")
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, "shm", "/dev/shm")
+
+			By("retrieving deployment name")
+			deploymentName, nameErr := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(nameErr).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
+			By("verifying emptyDir medium")
+			medium, mediumErr := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.volumes[?(@.name=='shm')].emptyDir.medium}")
+			Expect(mediumErr).NotTo(HaveOccurred())
+			Expect(medium).To(Equal("Memory"))
+
+			By("verifying emptyDir size limit")
+			sizeLimit, sizeLimitErr := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.volumes[?(@.name=='shm')].emptyDir.sizeLimit}")
+			Expect(sizeLimitErr).NotTo(HaveOccurred())
+			Expect(sizeLimit).To(Equal("1Gi"))
+		})
+
 		It("should reject workspace referencing PVC owned by another workspace", func() {
 			ownerWorkspaceFilename := "owner-workspace"
 			ownerWorkspaceName := "owner-workspace"

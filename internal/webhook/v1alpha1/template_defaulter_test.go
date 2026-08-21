@@ -20,6 +20,10 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 )
 
+func templateStringPtr(value string) *string {
+	return &value
+}
+
 var _ = Describe("TemplateDefaulter", func() {
 	var (
 		defaulter *TemplateDefaulter
@@ -50,6 +54,15 @@ var _ = Describe("TemplateDefaulter", func() {
 				},
 				PrimaryStorage: &workspacev1alpha1.StorageConfig{
 					DefaultSize: resource.MustParse("1Gi"),
+				},
+				DefaultVolumes: []workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "shm",
+						MountPath: "/dev/shm",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+						},
+					},
 				},
 				DefaultNodeSelector: map[string]string{
 					"node-type": "compute",
@@ -96,6 +109,13 @@ var _ = Describe("TemplateDefaulter", func() {
 			// Check scheduling defaults
 			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue("node-type", "compute"))
 
+			// Check volume defaults
+			Expect(workspace.Spec.Volumes).To(HaveLen(1))
+			Expect(workspace.Spec.Volumes[0].Name).To(Equal("shm"))
+			Expect(workspace.Spec.Volumes[0].MountPath).To(Equal("/dev/shm"))
+			Expect(workspace.Spec.Volumes[0].EmptyDir).NotTo(BeNil())
+			Expect(workspace.Spec.Volumes[0].EmptyDir.Medium).To(Equal(corev1.StorageMediumMemory))
+
 			// Check metadata defaults
 			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, "test-template"))
 		})
@@ -117,7 +137,44 @@ var _ = Describe("TemplateDefaulter", func() {
 
 			// Should still apply other defaults
 			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.Volumes).To(HaveLen(1))
+			Expect(workspace.Spec.Volumes[0].Name).To(Equal("shm"))
 			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, "test-template"))
+		})
+
+		It("should preserve an existing template default volume without duplicating it", func() {
+			workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{
+				{
+					Name:      "shm",
+					MountPath: "/dev/shm",
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+					},
+				},
+			}
+
+			err := defaulter.ApplyTemplateDefaults(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(workspace.Spec.Volumes).To(HaveLen(1))
+			Expect(workspace.Spec.Volumes[0].Name).To(Equal("shm"))
+		})
+
+		It("should preserve user-defined extra volumes and append missing template defaults", func() {
+			workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{
+				{
+					Name:                      "data",
+					MountPath:                 "/data",
+					PersistentVolumeClaimName: templateStringPtr("shared-data-pvc"),
+				},
+			}
+
+			err := defaulter.ApplyTemplateDefaults(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(workspace.Spec.Volumes).To(HaveLen(2))
+			Expect(workspace.Spec.Volumes[0].Name).To(Equal("data"))
+			Expect(workspace.Spec.Volumes[1].Name).To(Equal("shm"))
 		})
 
 		It("should do nothing when no template reference", func() {

@@ -30,6 +30,8 @@ const (
 	ViolationTypeResourceExceeded               = "ResourceExceeded"
 	ViolationTypeStorageExceeded                = "StorageExceeded"
 	ViolationTypeSecondaryStorageNotAllowed     = "SecondaryStorageNotAllowed"
+	ViolationTypeInvalidVolumeSource            = "InvalidVolumeSource"
+	ViolationTypeInvalidVolumeConfiguration     = "InvalidVolumeConfiguration"
 	ViolationTypeVolumeOwnedByAnotherWorkspace  = "VolumeOwnedByAnotherWorkspace"
 	ViolationTypeInvalidTemplate                = "InvalidTemplate"
 	ViolationTypeIdleShutdownOverrideNotAllowed = "IdleShutdownOverrideNotAllowed"

@@ -96,6 +96,7 @@ webhooks:
       - v1
     rules:
       - operations:
+          - CREATE
           - UPDATE
         apiGroups:
           - workspace.jupyter.org

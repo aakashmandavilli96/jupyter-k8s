@@ -37,6 +37,10 @@ const (
 	testStrategyName      = "test-strategy"
 )
 
+func stringPtr(value string) *string {
+	return &value
+}
+
 // createUserContext creates a context with user information for testing
 func createUserContext(baseCtx context.Context, operation, username string, groups ...string) context.Context {
 	userInfo := &authenticationv1.UserInfo{Username: username, Groups: groups}
@@ -698,7 +702,7 @@ var _ = Describe("Workspace Webhook", func() {
 				allowSecondaryStorages := true
 				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
 				volumes := []workspacev1alpha1.VolumeSpec{
-					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+					{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc"), MountPath: "/data"},
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).To(BeNil())
@@ -707,7 +711,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should allow volumes when AllowSecondaryStorages is nil (default true)", func() {
 				template.Spec.AllowSecondaryStorages = nil
 				volumes := []workspacev1alpha1.VolumeSpec{
-					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+					{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc"), MountPath: "/data"},
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).To(BeNil())
@@ -717,7 +721,7 @@ var _ = Describe("Workspace Webhook", func() {
 				allowSecondaryStorages := false
 				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
 				volumes := []workspacev1alpha1.VolumeSpec{
-					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+					{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc"), MountPath: "/data"},
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).NotTo(BeNil())
@@ -731,6 +735,230 @@ var _ = Describe("Workspace Webhook", func() {
 				volumes := []workspacev1alpha1.VolumeSpec{}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).To(BeNil())
+			})
+
+			It("should allow template default volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				template.Spec.DefaultVolumes = []workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "shm",
+						MountPath: "/dev/shm",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+						},
+					},
+				}
+				violation := validateSecondaryStorages(template.Spec.DefaultVolumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject extra volumes beyond template defaults when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				template.Spec.DefaultVolumes = []workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "shm",
+						MountPath: "/dev/shm",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+						},
+					},
+				}
+				volumes := append([]workspacev1alpha1.VolumeSpec{}, template.Spec.DefaultVolumes...)
+				volumes = append(volumes, workspacev1alpha1.VolumeSpec{
+					Name:                      "data",
+					MountPath:                 "/data",
+					PersistentVolumeClaimName: stringPtr("data-pvc"),
+				})
+
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeSecondaryStorageNotAllowed))
+			})
+
+			It("should reject a workspace volume that overrides a template default volume", func() {
+				template.Spec.DefaultVolumes = []workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "shm",
+						MountPath: "/dev/shm",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+						},
+					},
+				}
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "shm",
+						MountPath: "/tmp/shm",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+						},
+					},
+				}
+
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+		})
+
+		Context("validateVolumeSources", func() {
+			It("should allow a PVC-backed volume", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc"), MountPath: "/data"},
+				})
+				Expect(violation).To(BeNil())
+			})
+
+			It("should allow an emptyDir volume", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "shm",
+						MountPath: "/dev/shm",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+						},
+					},
+				})
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject a volume with an empty name", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{MountPath: "/data", PersistentVolumeClaimName: stringPtr("data-pvc")},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject a volume with an invalid Kubernetes volume name", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{Name: "Bad_Name", MountPath: "/data", PersistentVolumeClaimName: stringPtr("data-pvc")},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject a volume with an empty mount path", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc")},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject a volume with a relative mount path", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{Name: "data", MountPath: "data", PersistentVolumeClaimName: stringPtr("data-pvc")},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject a volume without a source", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{Name: "broken", MountPath: "/broken"},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeSource))
+			})
+
+			It("should reject a volume with both sources", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{
+						Name:                      "broken",
+						MountPath:                 "/broken",
+						PersistentVolumeClaimName: stringPtr("data-pvc"),
+						EmptyDir:                  &corev1.EmptyDirVolumeSource{},
+					},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeSource))
+			})
+
+			It("should reject an empty PVC name even when emptyDir is also specified", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{
+						Name:                      "broken",
+						MountPath:                 "/broken",
+						PersistentVolumeClaimName: stringPtr(""),
+						EmptyDir:                  &corev1.EmptyDirVolumeSource{},
+					},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeSource))
+			})
+
+			It("should reject an invalid PVC name", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{Name: "data", MountPath: "/data", PersistentVolumeClaimName: stringPtr("Bad_PVC")},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject an invalid emptyDir medium", func() {
+				violation := validateVolumeSources([]workspacev1alpha1.VolumeSpec{
+					{
+						Name:      "cache",
+						MountPath: "/cache",
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMedium("Disk"),
+						},
+					},
+				})
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+		})
+
+		Context("validateVolumeMountConflicts", func() {
+			It("should reject duplicate volume names", func() {
+				testWorkspace := &workspacev1alpha1.Workspace{
+					Spec: workspacev1alpha1.WorkspaceSpec{
+						Volumes: []workspacev1alpha1.VolumeSpec{
+							{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc"), MountPath: "/data"},
+							{Name: "data", PersistentVolumeClaimName: stringPtr("other-pvc"), MountPath: "/other"},
+						},
+					},
+				}
+
+				violation := validateVolumeMountConflicts(testWorkspace)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject duplicate mount paths", func() {
+				testWorkspace := &workspacev1alpha1.Workspace{
+					Spec: workspacev1alpha1.WorkspaceSpec{
+						Volumes: []workspacev1alpha1.VolumeSpec{
+							{Name: "data", PersistentVolumeClaimName: stringPtr("data-pvc"), MountPath: "/data"},
+							{Name: "shm", MountPath: "/data", EmptyDir: &corev1.EmptyDirVolumeSource{}},
+						},
+					},
+				}
+
+				violation := validateVolumeMountConflicts(testWorkspace)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
+			})
+
+			It("should reject a mount path that conflicts with primary storage", func() {
+				testWorkspace := &workspacev1alpha1.Workspace{
+					Spec: workspacev1alpha1.WorkspaceSpec{
+						Storage: &workspacev1alpha1.StorageSpec{
+							Size: resource.MustParse("1Gi"),
+						},
+						Volumes: []workspacev1alpha1.VolumeSpec{
+							{Name: "shm", MountPath: controller.DefaultMountPath, EmptyDir: &corev1.EmptyDirVolumeSource{}},
+						},
+					},
+				}
+
+				violation := validateVolumeMountConflicts(testWorkspace)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeInvalidVolumeConfiguration))
 			})
 		})
 

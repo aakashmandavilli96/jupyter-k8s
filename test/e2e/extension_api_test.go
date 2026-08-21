@@ -21,8 +21,6 @@ import (
 )
 
 const (
-	extensionAPIGroupDir      = "extension-api"
-	extensionAPISubgroupDir   = ""
 	extensionAPITestNamespace = "default"
 )
 

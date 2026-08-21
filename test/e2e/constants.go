@@ -39,6 +39,11 @@ const (
 	ConditionTypeStopped     = "Stopped"
 )
 
+const (
+	extensionAPIGroupDir    = "extension-api"
+	extensionAPISubgroupDir = ""
+)
+
 // WorkspaceLabelName is the label key used to identify workspace resources
 const WorkspaceLabelName = "workspace.jupyter.org/workspace-name"
 

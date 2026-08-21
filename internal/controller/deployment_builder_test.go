@@ -19,6 +19,10 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
+func stringPtr(value string) *string {
+	return &value
+}
+
 var _ = Describe("DeploymentBuilder", func() {
 	var (
 		ctx               context.Context
@@ -109,12 +113,12 @@ var _ = Describe("DeploymentBuilder", func() {
 					Volumes: []workspacev1alpha1.VolumeSpec{
 						{
 							Name:                      "data-volume",
-							PersistentVolumeClaimName: "data-pvc",
+							PersistentVolumeClaimName: stringPtr("data-pvc"),
 							MountPath:                 "/data",
 						},
 						{
 							Name:                      "shared-volume",
-							PersistentVolumeClaimName: "shared-pvc",
+							PersistentVolumeClaimName: stringPtr("shared-pvc"),
 							MountPath:                 "/shared",
 						},
 					},
@@ -150,6 +154,46 @@ var _ = Describe("DeploymentBuilder", func() {
 
 			Expect(volumeMap["data-volume"]).To(Equal("data-pvc"))
 			Expect(volumeMap["shared-volume"]).To(Equal("shared-pvc"))
+		})
+
+		It("should mount emptyDir volumes alongside persistent storage", func() {
+			sizeLimit := resource.MustParse("1Gi")
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-emptydir",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Storage: &workspacev1alpha1.StorageSpec{
+						Size: resource.MustParse("1Gi"),
+					},
+					Volumes: []workspacev1alpha1.VolumeSpec{
+						{
+							Name:      "shm",
+							MountPath: "/dev/shm",
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium:    corev1.StorageMediumMemory,
+								SizeLimit: &sizeLimit,
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.VolumeMounts).To(HaveLen(2))
+			Expect(container.VolumeMounts[1].Name).To(Equal("shm"))
+			Expect(container.VolumeMounts[1].MountPath).To(Equal("/dev/shm"))
+
+			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2))
+			Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal("shm"))
+			Expect(deployment.Spec.Template.Spec.Volumes[1].EmptyDir).NotTo(BeNil())
+			Expect(deployment.Spec.Template.Spec.Volumes[1].EmptyDir.Medium).To(Equal(corev1.StorageMediumMemory))
+			Expect(*deployment.Spec.Template.Spec.Volumes[1].EmptyDir.SizeLimit).To(Equal(sizeLimit))
 		})
 	})
 
