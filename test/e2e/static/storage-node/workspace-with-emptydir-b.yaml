@@ -1,0 +1,16 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-emptydir-b
+spec:
+  displayName: "Workspace with emptyDir Volume B"
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  storage:
+    size: 1Gi
+  volumes:
+    - name: shm
+      mountPath: /dev/shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi

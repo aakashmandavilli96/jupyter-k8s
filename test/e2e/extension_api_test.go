@@ -23,12 +23,6 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
-const (
-	extensionAPIGroupDir      = "extension-api"
-	extensionAPISubgroupDir   = ""
-	extensionAPITestNamespace = "default"
-)
-
 var _ = Describe("Extension API", Ordered, func() {
 	Context("Setup and registration", func() {
 

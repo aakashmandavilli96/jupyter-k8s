@@ -152,6 +152,56 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(volumeMap["data-volume"]).To(Equal("data-pvc"))
 			Expect(volumeMap["shared-volume"]).To(Equal("shared-pvc"))
 		})
+
+		It("should mount PVC and emptyDir volumes alongside persistent storage", func() {
+			sizeLimit := resource.MustParse("1Gi")
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-emptydir",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Storage: &workspacev1alpha1.StorageSpec{
+						Size: resource.MustParse("1Gi"),
+					},
+					Volumes: []workspacev1alpha1.VolumeSpec{
+						{
+							Name:                      "data-volume",
+							PersistentVolumeClaimName: "data-pvc",
+							MountPath:                 "/data",
+						},
+						{
+							Name:      "shm",
+							MountPath: "/dev/shm",
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium:    corev1.StorageMediumMemory,
+								SizeLimit: &sizeLimit,
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.VolumeMounts).To(HaveLen(3))
+			Expect(container.VolumeMounts[1].Name).To(Equal("data-volume"))
+			Expect(container.VolumeMounts[1].MountPath).To(Equal("/data"))
+			Expect(container.VolumeMounts[2].Name).To(Equal("shm"))
+			Expect(container.VolumeMounts[2].MountPath).To(Equal("/dev/shm"))
+
+			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(3))
+			Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal("data-volume"))
+			Expect(deployment.Spec.Template.Spec.Volumes[1].PersistentVolumeClaim).NotTo(BeNil())
+			Expect(deployment.Spec.Template.Spec.Volumes[1].PersistentVolumeClaim.ClaimName).To(Equal("data-pvc"))
+			Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal("shm"))
+			Expect(deployment.Spec.Template.Spec.Volumes[2].EmptyDir).NotTo(BeNil())
+			Expect(deployment.Spec.Template.Spec.Volumes[2].EmptyDir.Medium).To(Equal(corev1.StorageMediumMemory))
+			Expect(*deployment.Spec.Template.Spec.Volumes[2].EmptyDir.SizeLimit).To(Equal(sizeLimit))
+		})
 	})
 
 	Context("Container Configuration", func() {

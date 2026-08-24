@@ -78,7 +78,7 @@ type WorkspaceTemplateSpec struct {
 
 	// DefaultVolumes specifies default additional volumes for workspaces using this template
 	// Volumes are applied during defaulting only if the workspace does not specify any volumes
-	// Each volume references a pre-existing PVC by name in the workspace's namespace
+	// Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source
 	// +kubebuilder:validation:MaxItems=10
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`

@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-pvc-and-emptydir
+spec:
+  displayName: "Workspace with PVC and emptyDir Volumes"
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  storage:
+    size: 1Gi
+  volumes:
+    - name: data-volume
+      persistentVolumeClaimName: external-pvc-1
+      mountPath: /home/jovyan/data
+    - name: shm
+      mountPath: /dev/shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
