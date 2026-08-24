@@ -8,6 +8,8 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -47,6 +49,29 @@ var _ = Describe("VolumeDefaulter", func() {
 			Expect(workspace.Spec.Volumes[1].Name).To(Equal("models"))
 			Expect(workspace.Spec.Volumes[1].PersistentVolumeClaimName).To(Equal("ml-models-pvc"))
 			Expect(workspace.Spec.Volumes[1].MountPath).To(Equal("/models"))
+		})
+
+		It("should deep copy default emptyDir volumes", func() {
+			sizeLimit := resource.MustParse("1Gi")
+			template.Spec.DefaultVolumes = []workspacev1alpha1.VolumeSpec{
+				{
+					Name:      "shm",
+					MountPath: "/dev/shm",
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium:    corev1.StorageMediumMemory,
+						SizeLimit: &sizeLimit,
+					},
+				},
+			}
+
+			applyVolumeDefaults(workspace, template)
+
+			Expect(workspace.Spec.Volumes).To(HaveLen(1))
+			Expect(workspace.Spec.Volumes[0].EmptyDir).NotTo(BeNil())
+			Expect(workspace.Spec.Volumes[0].EmptyDir).NotTo(BeIdenticalTo(template.Spec.DefaultVolumes[0].EmptyDir))
+			Expect(workspace.Spec.Volumes[0].EmptyDir.SizeLimit).NotTo(BeNil())
+			Expect(workspace.Spec.Volumes[0].EmptyDir.SizeLimit).NotTo(BeIdenticalTo(template.Spec.DefaultVolumes[0].EmptyDir.SizeLimit))
+			Expect(*workspace.Spec.Volumes[0].EmptyDir.SizeLimit).To(Equal(sizeLimit))
 		})
 
 		It("should not override existing workspace volumes", func() {

@@ -60,6 +60,11 @@ func validateSecondaryStorages(volumes []workspacev1alpha1.VolumeSpec, template 
 // validateVolumeOwnership checks that volumes don't reference PVCs owned by other workspaces
 func validateVolumeOwnership(ctx context.Context, k8sClient client.Client, workspace *workspacev1alpha1.Workspace) *TemplateViolation {
 	for _, volume := range workspace.Spec.Volumes {
+		if volume.PersistentVolumeClaimName == "" {
+			// Non-PVC volumes, such as emptyDir, have no PVC ownership to validate.
+			continue
+		}
+
 		// Get the PVC
 		pvc := &corev1.PersistentVolumeClaim{}
 		err := k8sClient.Get(ctx, types.NamespacedName{
