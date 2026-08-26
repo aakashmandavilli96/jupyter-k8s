@@ -40,6 +40,12 @@ const (
 	ConditionTypeDeleting    = "Deleting"
 )
 
+const (
+	extensionAPIGroupDir      = "extension-api"
+	extensionAPISubgroupDir   = ""
+	extensionAPITestNamespace = "default"
+)
+
 // WorkspaceLabelName is the label key used to identify workspace resources
 const WorkspaceLabelName = "workspace.jupyter.org/workspace-name"
 

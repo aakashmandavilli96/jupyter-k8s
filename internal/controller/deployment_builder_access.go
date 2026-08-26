@@ -22,6 +22,11 @@ type partialAccessResourceData struct {
 	AccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 }
 
+const (
+	fieldName           = "name"
+	accessEnvFieldValue = "value"
+)
+
 func (b *DeploymentBuilder) getPrimaryContainerMergeEnv(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) *[]workspacev1alpha1.AccessEnvTemplate {
@@ -65,8 +70,8 @@ func (b *DeploymentBuilder) resolveAccessStrategyPrimaryContainerEnv(
 			}
 
 			envVars = append(envVars, map[string]string{
-				"name":  envTemplate.Name,
-				"value": value.String(),
+				fieldName:           envTemplate.Name,
+				accessEnvFieldValue: value.String(),
 			})
 		}
 	}
@@ -93,12 +98,12 @@ func (db *DeploymentBuilder) addAccessStrategyEnvToContainer(
 
 	// Add each environment variable from the access strategy
 	for _, resolvedEnvVar := range resolvedAccessStrategyEnv {
-		name, ok := resolvedEnvVar["name"]
+		name, ok := resolvedEnvVar[fieldName]
 		if !ok {
 			return fmt.Errorf("environment variable missing name: %s", name)
 		}
 
-		value, ok := resolvedEnvVar["value"]
+		value, ok := resolvedEnvVar[accessEnvFieldValue]
 		if !ok {
 			return fmt.Errorf("environment variable %s missing value", name)
 		}
