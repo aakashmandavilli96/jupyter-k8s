@@ -3837,12 +3837,37 @@ spec:
                   type: object
                 type: array
               volumes:
-                description: Volumes specifies additional volumes to mount from existing
-                  PersistantVolumeClaims
+                description: |-
+                  Volumes specifies additional volumes to mount from existing PersistentVolumeClaims
+                  or emptyDir sources.
                 items:
                   description: VolumeSpec defines a volume to mount from an existing
-                    PVC
+                    PVC or emptyDir source.
                   properties:
+                    emptyDir:
+                      description: EmptyDir configures a pod-scoped ephemeral volume
+                      properties:
+                        medium:
+                          description: |-
+                            medium represents what type of storage medium should back this directory.
+                            The default is "" which means to use the node's default medium.
+                            Must be an empty string (default) or Memory.
+                            More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir
+                          type: string
+                        sizeLimit:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            sizeLimit is the total amount of local storage required for this EmptyDir volume.
+                            The size limit is also applicable for memory medium.
+                            The maximum usage on memory medium EmptyDir would be the minimum value between
+                            the SizeLimit specified here and the sum of memory limits of all containers in a pod.
+                            The default is nil which means that the limit is undefined.
+                            More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                      type: object
                     mountPath:
                       description: MountPath is the path where the volume should be
                         mounted (Unix-style path, e.g. /data)
@@ -3854,12 +3879,17 @@ spec:
                     persistentVolumeClaimName:
                       description: PersistentVolumeClaimName is the name of the existing
                         PVC to mount
+                      minLength: 1
                       type: string
                   required:
                   - mountPath
                   - name
-                  - persistentVolumeClaimName
                   type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of persistentVolumeClaimName or emptyDir
+                      must be specified
+                    rule: (has(self.persistentVolumeClaimName) && !has(self.emptyDir))
+                      || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))
                 type: array
                 x-kubernetes-validations:
                 - message: volume name 'workspace-storage' is reserved

@@ -16,5 +16,7 @@ func applyVolumeDefaults(workspace *workspacev1alpha1.Workspace, template *works
 	}
 
 	workspace.Spec.Volumes = make([]workspacev1alpha1.VolumeSpec, len(template.Spec.DefaultVolumes))
-	copy(workspace.Spec.Volumes, template.Spec.DefaultVolumes)
+	for i := range template.Spec.DefaultVolumes {
+		template.Spec.DefaultVolumes[i].DeepCopyInto(&workspace.Spec.Volumes[i])
+	}
 }
