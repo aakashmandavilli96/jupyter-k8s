@@ -14,16 +14,23 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// VolumeSpec defines a volume to mount from an existing PVC
+// VolumeSpec defines a volume to mount from an existing PVC or emptyDir source.
+// +kubebuilder:validation:XValidation:rule="(has(self.persistentVolumeClaimName) && !has(self.emptyDir)) || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))",message="exactly one of persistentVolumeClaimName or emptyDir must be specified"
 type VolumeSpec struct {
 	// Name is a unique identifier for this volume within the pod (maps to pod.spec.volumes[].name)
 	Name string `json:"name"`
 
-	// PersistentVolumeClaimName is the name of the existing PVC to mount
-	PersistentVolumeClaimName string `json:"persistentVolumeClaimName"`
-
 	// MountPath is the path where the volume should be mounted (Unix-style path, e.g. /data)
 	MountPath string `json:"mountPath"`
+
+	// PersistentVolumeClaimName is the name of the existing PVC to mount
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	PersistentVolumeClaimName string `json:"persistentVolumeClaimName,omitempty"`
+
+	// EmptyDir configures a pod-scoped ephemeral volume
+	// +optional
+	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
 // ContainerConfig defines container command and args configuration
@@ -165,7 +172,8 @@ type WorkspaceSpec struct {
 	// Storage specifies the storage configuration
 	Storage *StorageSpec `json:"storage,omitempty"`
 
-	// Volumes specifies additional volumes to mount from existing PersistantVolumeClaims
+	// Volumes specifies additional volumes to mount from existing PersistentVolumeClaims
+	// or emptyDir sources.
 	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
 

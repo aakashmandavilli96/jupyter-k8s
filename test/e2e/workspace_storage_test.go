@@ -34,11 +34,19 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 		group            = "storage"
 		baseSubgroup     = "base"
 		externalSubgroup = "external"
+		nodeSubgroup     = "node"
 		templateSubgroup = "template"
 
 		baseWorkspaceName = "workspace-with-storage"
 		externalPvc1Name  = "external-pvc-1"
 		templateName      = "storage-template"
+
+		externalDataVolumeName = "data-volume"
+		externalDataMountPath  = "/home/jovyan/data"
+		emptyDirVolumeName     = "shm"
+		emptyDirMountPath      = "/dev/shm"
+		emptyDirWorkspaceName  = "workspace-with-emptydir"
+		mixedVolumeWorkspace   = "workspace-with-pvc-and-emptydir"
 	)
 
 	BeforeAll(func() {
@@ -281,13 +289,13 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			)
 
 			By("verifying first external mount")
-			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, "data-volume", "/home/jovyan/data")
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, externalDataVolumeName, externalDataMountPath)
 
 			By("verifying second external mount")
 			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, "shared-volume", "/home/jovyan/shared")
 
 			By("verifying can write to first external pvc")
-			VerifyPodCanAccessExternalVolumes(workspaceName, workspaceNamespace, externalPvc1Name, "/home/jovyan/data")
+			VerifyPodCanAccessExternalVolumes(workspaceName, workspaceNamespace, externalPvc1Name, externalDataMountPath)
 
 			By("verifying can write to second external pvc")
 			VerifyPodCanAccessExternalVolumes(workspaceName, workspaceNamespace, externalPvc2Name, "/home/jovyan/shared")
@@ -335,6 +343,94 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				ConditionTypeAvailable,
 				ConditionTrue,
 			)
+		})
+	})
+
+	Context("Node-local volumes", func() {
+		It("should mount memory-backed emptyDir volumes specified in volumes field", func() {
+			workspaceFilename := emptyDirWorkspaceName
+			workspaceName := emptyDirWorkspaceName
+
+			By("creating a workspace with a memory-backed emptyDir volume")
+			createWorkspaceForTest(workspaceFilename, group, nodeSubgroup)
+
+			By("waiting for the workspace to become available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying emptyDir volume mount")
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, emptyDirVolumeName, emptyDirMountPath)
+
+			By("retrieving deployment name")
+			deploymentName, nameErr := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(nameErr).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
+			By("verifying emptyDir medium")
+			medium, mediumErr := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.volumes[?(@.name=='shm')].emptyDir.medium}")
+			Expect(mediumErr).NotTo(HaveOccurred())
+			Expect(medium).To(Equal("Memory"))
+
+			By("verifying emptyDir size limit")
+			sizeLimit, sizeLimitErr := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.volumes[?(@.name=='shm')].emptyDir.sizeLimit}")
+			Expect(sizeLimitErr).NotTo(HaveOccurred())
+			Expect(sizeLimit).To(Equal("1Gi"))
+		})
+
+		It("should mount PVC and emptyDir volumes together", func() {
+			externalPvc1Filename := externalPvc1Name
+			workspaceFilename := mixedVolumeWorkspace
+			workspaceName := mixedVolumeWorkspace
+
+			By("creating a standalone PVC")
+			createPvcForTest(externalPvc1Filename, group, externalSubgroup)
+
+			By("creating a workspace with PVC and emptyDir volumes")
+			createWorkspaceForTest(workspaceFilename, group, nodeSubgroup)
+
+			By("waiting for the workspace to become available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying PVC and emptyDir volume mounts")
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, externalDataVolumeName, externalDataMountPath)
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, emptyDirVolumeName, emptyDirMountPath)
+
+			By("verifying can write to the PVC volume")
+			VerifyPodCanAccessExternalVolumes(workspaceName, workspaceNamespace, externalPvc1Name, externalDataMountPath)
+		})
+
+		It("should allow multiple workspaces to use emptyDir volumes", func() {
+			workspaceNames := []string{"workspace-with-emptydir-a", "workspace-with-emptydir-b"}
+
+			for _, workspaceName := range workspaceNames {
+				By("creating workspace " + workspaceName + " with a memory-backed emptyDir volume")
+				createWorkspaceForTest(workspaceName, group, nodeSubgroup)
+			}
+
+			for _, workspaceName := range workspaceNames {
+				By("waiting for workspace " + workspaceName + " to become available")
+				WaitForWorkspaceToReachCondition(
+					workspaceName,
+					workspaceNamespace,
+					ConditionTypeAvailable,
+					ConditionTrue,
+				)
+
+				By("verifying emptyDir volume mount for workspace " + workspaceName)
+				VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, emptyDirVolumeName, emptyDirMountPath)
+			}
 		})
 	})
 

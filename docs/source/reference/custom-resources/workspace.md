@@ -247,7 +247,7 @@ _Appears in:_
 
 
 
-VolumeSpec defines a volume to mount from an existing PVC
+VolumeSpec defines a volume to mount from an existing PVC or emptyDir source.
 
 _Appears in:_
 - [WorkspaceSpec](#workspacespec)
@@ -256,8 +256,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is a unique identifier for this volume within the pod (maps to pod.spec.volumes[].name) |  |  |
-| `persistentVolumeClaimName` _string_ | PersistentVolumeClaimName is the name of the existing PVC to mount |  |  |
 | `mountPath` _string_ | MountPath is the path where the volume should be mounted (Unix-style path, e.g. /data) |  |  |
+| `persistentVolumeClaimName` _string_ | PersistentVolumeClaimName is the name of the existing PVC to mount |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `emptyDir` _[EmptyDirVolumeSource](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#emptydirvolumesource-v1-core)_ | EmptyDir configures a pod-scoped ephemeral volume |  | Optional: \{\} <br /> |
 
 
 
@@ -279,7 +280,7 @@ _Appears in:_
 | `accessType` _string_ | AccessType specifies who can connect to the workspace.<br />Public means anyone with RBAC permissions can connect to workspace.<br />OwnerOnly means only the creator can connect to the workspace. |  | Enum: [Public OwnerOnly] <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#resourcerequirements-v1-core)_ | Resources specifies the resource requirements |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage specifies the storage configuration |  |  |
-| `volumes` _[VolumeSpec](#volumespec) array_ | Volumes specifies additional volumes to mount from existing PersistantVolumeClaims |  |  |
+| `volumes` _[VolumeSpec](#volumespec) array_ | Volumes specifies additional volumes to mount from existing PersistentVolumeClaims<br />or emptyDir sources. |  |  |
 | `containerConfig` _[ContainerConfig](#containerconfig)_ | ContainerConfig specifies container command and args configuration |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#envvar-v1-core) array_ | Env specifies environment variables for the workspace container<br />When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name) |  | Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | NodeSelector specifies node selection constraints for the workspace pod |  |  |
